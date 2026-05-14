@@ -1,0 +1,20 @@
+# Python temporales
+__pycache__/
+*.pyc
+
+# Base de datos (No la subas si tiene datos reales de clientes)
+*.db
+*.sqlite3
+
+# Archivos generados (PDFs)
+exports/
+facturas/
+cotizaciones/
+
+# Entornos virtuales
+venv/
+.env
+
+# VS Code / Sistema
+.vscode/
+.DS_Store
