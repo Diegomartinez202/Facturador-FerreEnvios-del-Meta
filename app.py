@@ -64,29 +64,85 @@ def main():
 
     st.markdown("---")
     
-    # --- LÓGICA DE DATOS PARA EL DASHBOARD ---
+    # --- LÓGICA DE DATOS Y VALIDACIÓN TÉCNICA (Sincronizada) ---
     recaudo_hoy = 0
-    conteo_hoy = 0
-    try:
-        conn = st.session_state.db.conectar()
-        # Consulta SQL para facturación del día
-        query = "SELECT total FROM historial_ventas WHERE fecha = date('now')"
-        df_ventas = pd.read_sql_query(query, conn)
-        conn.close()
+    utilidad_hoy = 0
+    total_docs_historico = 0
+    facturas_conteo_total = 0
+    cotizaciones_conteo_total = 0
+    df_facts_hoy = pd.DataFrame()
+    
+    ruta_db = "data/ferreteria_final.db"
+    db_existe = os.path.exists(ruta_db)
+    estado_sistema = "Sincronizado ✅" if db_existe else "Error DB ❌"
+    
+    if db_existe:
+        try:
+       
+            conn = st.session_state.db.conectar()
+            
+            # MEJORA: Traemos TODO el historial para el conteo global (31 archivos)
+            # Quitamos el WHERE fecha para que no nos oculte documentos pasados
+            df_ventas_todo = pd.read_sql_query("""
+                SELECT v.total, v.fecha, v.tipo_doc, v.numero_doc,
+                (SELECT SUM(d.subtotal - (d.cantidad * d.costo_proveedor)) 
+                 FROM detalle_ventas d WHERE d.numero_doc = v.numero_doc) as utilidad_doc
+                FROM historial_ventas v
+            """, conn)
+            conn.close()
+            
+            if not df_ventas_todo.empty:
+                
+                df_ventas_todo['fecha'] = df_ventas_todo['fecha'].astype(str)
+                # 1. CÁLCULO PARA RECAUDO (Solo Hoy)
+                fecha_actual = datetime.now().strftime("%Y-%m-%d")
+                # Filtramos en memoria lo que pertenece a hoy
+                df_hoy = df_ventas_todo[df_ventas_todo['fecha'].str.contains(fecha_actual)]
+                df_facts_hoy = df_hoy[df_hoy['tipo_doc'] == "FACTURA DE VENTA"]
+                
+                recaudo_hoy = df_facts_hoy['total'].sum()
+                
+                recaudo_hoy = df_facts_hoy['total'].sum()
+                if 'utilidad_doc' in df_facts_hoy.columns:
+                    utilidad_hoy = df_facts_hoy['utilidad_doc'].sum()
+                
+                # 2. CONTEO HISTÓRICO (Tus 31 archivos)
+                total_docs_historico = len(df_ventas_todo)
+                
+                facturas_conteo_total = len(df_ventas_todo[df_ventas_todo['tipo_doc'] == "FACTURA DE VENTA"])
+                cotizaciones_conteo_total = len(df_ventas_todo[df_ventas_todo['tipo_doc'] == "COTIZACIÓN"])
         
-        if not df_ventas.empty:
-            recaudo_hoy = df_ventas['total'].sum()
-            conteo_hoy = len(df_ventas)
-    except:
-        pass
+        except Exception as e:
+            estado_sistema = "Error Crítico ⚠️"
+            st.error(f"Error al leer base de datos: {e}")
+            
+        # El bloque 'else' del 'try' es opcional, pero aquí el error era que faltaba el 'except'
+    else:
+        st.error(f"🚨 No se encontró el archivo de base de datos en {ruta_db}")
 
-    # --- DASHBOARD VISUAL ---
-    c1, c2, c3 = st.columns(3)
-    c1.metric("FACTURACIÓN HOY", f"${recaudo_hoy:,.0f} COP", f"{conteo_hoy} Documentos")
-    c2.metric("OPERADOR ACTIVO", "Daniel Martinez") 
-    c3.metric("ESTADO DEL SISTEMA", "Sincronizado ✅")
+    # --- PANEL VISUAL DE 4 MÉTRICAS (Actualizado en app.py) ---
+    st.markdown("### 📊 Resumen de Operaciones")
+    c1, c2, c3, c4 = st.columns(4)
+    
+    with c1:
+        st.metric("FACTURACIÓN HOY", f"${recaudo_hoy:,.0f} COP")
+    
+    with c2:
+        # Aquí inyectamos la utilidad real basada en tu Costo Inversión
+        st.metric("UTILIDAD ESTIMADA", f"${utilidad_hoy:,.0f} COP", delta=f"{len(df_facts_hoy)} ventas")
+    
+    with c3:
+        st.metric(
+            "🧾 DOCUMENTACIÓN", 
+            f"{total_docs_historico} Archivos",
+            help=f"Histórico Total:\n- Facturas: {facturas_conteo_total}\n- Cotizaciones: {cotizaciones_conteo_total}"
+        )
+        
+    with c4:
+        st.metric("ESTADO DEL SISTEMA", estado_sistema)
 
-    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("---")
+
     
     # --- SECCIÓN DE ACCIONES RÁPIDAS (Botonera Ajustada a tus nombres) ---
     st.subheader("🚀 Acciones Rápidas")

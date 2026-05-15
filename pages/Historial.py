@@ -13,8 +13,12 @@ def show():
     if not df_ventas.empty:
         # Filtros rápidos
         mes_actual = datetime.now().strftime('%Y-%m')
+        # Filtramos primero por mes
         ventas_mes = df_ventas[df_ventas['fecha'].str.contains(mes_actual)]
-        total_mes = ventas_mes['total'].sum()
+
+        # MEJORA: Solo sumamos dinero de FACTURAS para el recuadro de arriba
+        facturas_reales = df_ventas[df_ventas['tipo_doc'] == "FACTURA DE VENTA"]
+        total_mes = facturas_reales['total'].sum()
 
         # KPIs Visuales
         c1, c2, c3 = st.columns(3)
